@@ -1,8 +1,26 @@
 # HCloud — A Local Private Cloud for Harvard, Powered by OpenShift
 
-HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. It runs a **real OpenShift 4.x cluster on this workstation, alongside the existing Ubuntu desktop**, so NERC pods, services, and workflows can be migrated and kept running locally.
+HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. It runs a **real OpenShift 4.x cluster on an ordinary Linux workstation, alongside the existing Ubuntu desktop**, so NERC pods, services, and workflows can be migrated and kept running locally at Harvard.
 
-## Is this possible on this machine?
+## What is HCloud for? (main applications)
+
+1. **A landing zone for NERC workloads.** NERC is shutting down. HCloud gives every pod, service, route, image, and data volume currently on NERC's OpenShift a place to keep running — same platform (OpenShift 4), same `oc` CLI and web console, same Deployment/Service/Route model — so migration is an export/re-apply, not a rewrite (Phase 3).
+2. **A private research cloud for the group.** Department members get NERC-style accounts, per-project quotas, S3 object storage and shared filesystems on the machines' large disks, and JupyterLab notebook workbenches — the day-to-day research computing NERC provided, now on hardware we own.
+3. **A safe place to test and develop OpenShift services.** Because the whole cloud is a start/stoppable VM, you can experiment with operators, migrations, and cluster configuration without risking anything — snapshot, break it, wipe it, rebuild it in an hour.
+4. **A portable platform, not a one-off install.** Everything lives in this repo as scripts and manifests and deploys identically to the home desktop and the 32 GB office machine; when real server hardware arrives, the same manifests move to a multi-node OKD cluster (Phase 6).
+
+## Questions & answers
+
+**Q: Can Ubuntu keep running on the desktop while a private cloud runs on the same machine?**
+**A: Yes — that is the core design.** The cloud is a genuine single-node OpenShift cluster inside a KVM virtual machine (OpenShift Local / CRC). Ubuntu is never modified or replaced: you boot the cloud with `crc start` when you need it and reclaim the RAM with `crc stop` when you don't, and cluster state persists across stops. On the 32 GB office machine coexistence is comfortable (18 GB to the cloud, ~14 GB left for the desktop); on the 15 GiB home desktop it works but you should close heavy apps while the cloud runs.
+
+**Q: Can I test all the local OpenShift services and migrate my NERC pods and services onto it?**
+**A: Yes.** CRC is a real OpenShift 4 cluster — web console, operators, internal image registry, RBAC, builds, routes all work locally. Migration from NERC is a standard, supported path done in Phase 3: export each NERC namespace's manifests (`scripts/30-export-nerc.sh`), mirror the container images with `skopeo`/`oc image mirror`, copy volume data with `oc rsync`, scrub cluster-specific fields, and re-apply here. **Do the export while NERC is still reachable.**
+
+**Q: What are the limits?**
+**A:** Single-node and RAM-bound: many users can have accounts, but simultaneous heavy workloads are limited (~2–3 on the home desktop, roughly double on the office machine). OpenStack-style user VMs and GPU notebooks are deferred phases, not day-one features. Details in "Honest limits" below.
+
+## Is this possible on these machines?
 
 **Yes — with honest limits.** The approach is **OpenShift Local (CRC)**: a genuine single-node OpenShift cluster inside a KVM virtual machine. You boot it when you need it (`crc start`) and shut it down when you don't (`crc stop`), and Ubuntu stays untouched. Everything NERC-critical for migration testing works: the OpenShift web console, `oc` CLI, Deployments/Services/Routes, the internal image registry, RBAC, projects and quotas.
 

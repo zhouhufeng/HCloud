@@ -6,20 +6,24 @@ HCloud is a self-hosted replacement for the terminating [NERC (New England Resea
 
 **Yes — with honest limits.** The approach is **OpenShift Local (CRC)**: a genuine single-node OpenShift cluster inside a KVM virtual machine. You boot it when you need it (`crc start`) and shut it down when you don't (`crc stop`), and Ubuntu stays untouched. Everything NERC-critical for migration testing works: the OpenShift web console, `oc` CLI, Deployments/Services/Routes, the internal image registry, RBAC, projects and quotas.
 
-### This machine vs. the plan
+### Deployment targets
 
-| Resource | This workstation | What HCloud uses | Verdict |
-|---|---|---|---|
-| CPU | i7-6700 — 4 cores / 8 threads, VT-x ✓ | 6 vCPU for the cluster VM | OK |
-| RAM | 15 GiB (desktop uses ~8 GiB) | 10–11 GiB for the cluster VM | **Tight — close heavy apps (browser, IDE) before `crc start`** |
-| Disk | 82 GiB free on `/` (SSD), 208 GiB on SSN SSD, 1.8 TB + 5.5 TB HDDs | ~40 GiB for cluster VM; HDDs for S3/NFS bulk storage | OK |
-| GPU | GTX 1080 (drives the display) | Not available inside the cluster initially | See Phase 5 |
-| KVM | `/dev/kvm` present | libvirt/qemu (Phase 0 installs it) | OK |
+HCloud deploys from this one repo to **two machines**; `scripts/01-install-crc.sh` auto-detects the host RAM and applies the right profile.
+
+| | Home desktop (this repo's dev machine) | Office machine |
+|---|---|---|
+| CPU | i7-6700 — 4 cores / 8 threads, VT-x ✓ | (record when deploying) |
+| Host RAM | 15 GiB (desktop uses ~8 GiB) | 32 GB |
+| Storage | ~8 TB (1.8 TB + 5.5 TB HDDs, 2× 224 GB SSDs, 238 GB NVMe) | 22 TB |
+| Profile | **home**: 6 vCPU / 10.5 GiB / 60 GiB VM | **office**: 6 vCPU / 18 GiB / 120 GiB VM |
+| Desktop coexistence | Tight — close heavy apps before `crc start` | Comfortable — desktop keeps ~14 GB |
+| Role | Migration testing, pilot | Primary department platform; Phase 6 features (VMs, more users) viable sooner |
+| GPU | GTX 1080 (drives the display) — Phase 5 optional | (record when deploying) |
 
 ### Honest limits (read before deploying)
 
-1. **Concurrency, not head-count, is the limit.** 10+ department users can have accounts, projects, and quotas — but only ~2–3 can run real workloads *at the same time* on 4 cores / 11 GiB. This is a migration target and pilot platform, not a production datacenter.
-2. **RAM is the binding constraint.** The i7-6700 supports up to 64 GB DDR4; a ~$60–100 upgrade to 32–64 GB is the single highest-leverage improvement and unlocks Phases 5–6.
+1. **Concurrency, not head-count, is the limit.** 10+ department users can have accounts, projects, and quotas — but simultaneous heavy workloads are bounded by the host: ~2–3 on the home desktop, roughly double that on the 32 GB office machine. This is a migration target and pilot platform, not a production datacenter.
+2. **RAM is the binding constraint on the home desktop.** The i7-6700 supports up to 64 GB DDR4; a ~$60–100 upgrade is the single highest-leverage improvement there. The office machine's 32 GB is already comfortable.
 3. **OpenStack-style VMs (OpenShift Virtualization) need nested virtualization inside an already-tight VM** — deferred to Phase 6 (after RAM upgrade).
 4. **GPU notebooks** require passing the GTX 1080 into the cluster VM (VFIO) and moving the desktop display to the Intel HD 530 iGPU — doable, but optional Phase 5.
 5. CRC is licensed/designed by Red Hat as a development/testing cluster. For a department-grade deployment later, Phase 6 moves the same manifests to multi-node **OKD** on real server hardware — nothing built here is throwaway.
@@ -56,7 +60,7 @@ HCloud is a self-hosted replacement for the terminating [NERC (New England Resea
 ### Phase 1 — Install and start OpenShift (~30–60 min, mostly download)
 
 1. Download the `crc` binary from the public OpenShift mirror. → `scripts/01-install-crc.sh`
-2. Configure the cluster VM: 6 vCPU, 10.5 GiB RAM, 60 GiB disk (kept on `/`; relocatable to the SSN SSD via symlinking `~/.crc`).
+2. The script auto-sizes the cluster VM by host RAM — **home** profile: 6 vCPU / 10.5 GiB / 60 GiB; **office** profile: 6 vCPU / 18 GiB / 120 GiB (override with `HCLOUD_CPUS` / `HCLOUD_MEMORY_MIB` / `HCLOUD_DISK_GIB`). The VM disk lives under `~/.crc`; relocatable to a bigger drive via symlink.
 3. `crc setup` (one-time host prep) then `crc start -p ~/pull-secret.txt`.
 4. Verify: log into the console at `https://console-openshift-console.apps-crc.testing` (credentials from `crc console --credentials`) and run `oc get nodes`.
 

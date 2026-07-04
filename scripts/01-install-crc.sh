@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Phase 1: download OpenShift Local (crc), configure it for this workstation, start the cluster.
-# Sized for: i7-6700 (8 threads), 15 GiB RAM host -> 6 vCPU / 10.5 GiB / 60 GiB VM.
+# Phase 1: download OpenShift Local (crc), configure it for this machine, start the cluster.
+# Auto-sizes the cluster VM from host RAM:
+#   home profile   (<24 GB host, e.g. 15 GiB desktop) -> 6 vCPU / 10.5 GiB /  60 GiB disk
+#   office profile (>=24 GB host, e.g. 32 GB machine) -> 6 vCPU / 18 GiB   / 120 GiB disk
+# Override with env vars: HCLOUD_CPUS, HCLOUD_MEMORY_MIB, HCLOUD_DISK_GIB.
 set -euo pipefail
 
 CRC_URL="https://mirror.openshift.com/pub/openshift-v4/clients/crc/latest/crc-linux-amd64.tar.xz"
@@ -24,11 +27,21 @@ if [ ! -f "$PULL_SECRET" ]; then
   exit 1
 fi
 
-echo "==> Configuring cluster VM for this machine"
+host_ram_gib=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo)
+if [ "$host_ram_gib" -ge 24 ]; then
+  profile=office; mem=18432; disk=120
+else
+  profile=home; mem=10752; disk=60
+fi
+CPUS="${HCLOUD_CPUS:-6}"
+MEM="${HCLOUD_MEMORY_MIB:-$mem}"
+DISK="${HCLOUD_DISK_GIB:-$disk}"
+
+echo "==> Host has ${host_ram_gib} GiB RAM -> '$profile' profile: ${CPUS} vCPU, ${MEM} MiB RAM, ${DISK} GiB disk"
 crc config set consent-telemetry no
-crc config set cpus 6
-crc config set memory 10752        # MiB; leaves ~4.5 GiB for a lightweight desktop
-crc config set disk-size 60        # GiB, on / (82 GiB free); see docs for relocating ~/.crc
+crc config set cpus "$CPUS"
+crc config set memory "$MEM"
+crc config set disk-size "$DISK"
 crc config set pull-secret-file "$PULL_SECRET"
 
 echo "==> One-time host setup"

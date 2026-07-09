@@ -5,8 +5,14 @@ set -euo pipefail
 echo "==> Installing libvirt/KVM stack"
 sudo apt-get update
 sudo apt-get install -y \
-  qemu-kvm libvirt-daemon-system libvirt-clients virtiofsd \
+  qemu-kvm libvirt-daemon-system libvirt-clients \
   network-manager jq curl xz-utils
+
+# virtiofsd is only needed for CRC's optional shared-directories feature and is
+# not a standalone package on some releases (e.g. Ubuntu 24.04). Best-effort.
+if ! sudo apt-get install -y virtiofsd 2>/dev/null; then
+  echo "  note: 'virtiofsd' package unavailable here — skipping (only needed for 'crc config set enable-shared-dirs')"
+fi
 
 echo "==> Enabling libvirt daemon"
 sudo systemctl enable --now libvirtd

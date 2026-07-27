@@ -1,143 +1,98 @@
-# HCloud — A Local Private Cloud for Harvard, Powered by OpenShift
+# HCloud — A Local Private Cloud to Replace NERC
 
-HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. It runs a **real OpenShift 4.x cluster on an ordinary Linux workstation, alongside the existing Ubuntu desktop**, so NERC pods, services, and workflows can be migrated and kept running locally at Harvard.
+HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. It runs a **production Kubernetes cluster (RKE2) bare-metal on a Linux workstation**, so the group's NERC OpenShift project — pods, services, databases, object storage, and ~7 TiB of data — can be migrated, kept running, and **served publicly** on hardware we own.
 
-## What is HCloud for? (main applications)
+> **Platform note (2026-07):** the project originally targeted OpenShift Local (CRC). We **pivoted to RKE2** because CRC is a Red-Hat *development/testing* tool — single-node, ephemeral, not supported for public production serving. RKE2 is a CNCF-certified, production-grade Kubernetes that runs bare-metal (no VM overhead), frees ~8–10 GB of RAM for workloads, and can serve the public website. OpenShift `Route` objects are converted to Kubernetes `Ingress`; everything else applies unchanged.
 
-1. **A landing zone for NERC workloads.** NERC is shutting down. HCloud gives every pod, service, route, image, and data volume currently on NERC's OpenShift a place to keep running — same platform (OpenShift 4), same `oc` CLI and web console, same Deployment/Service/Route model — so migration is an export/re-apply, not a rewrite (Phase 3).
-2. **A private research cloud for the group.** Department members get NERC-style accounts, per-project quotas, S3 object storage and shared filesystems on the machines' large disks, and JupyterLab notebook workbenches — the day-to-day research computing NERC provided, now on hardware we own.
-3. **A safe place to test and develop OpenShift services.** Because the whole cloud is a start/stoppable VM, you can experiment with operators, migrations, and cluster configuration without risking anything — snapshot, break it, wipe it, rebuild it in an hour.
-4. **A portable platform, not a one-off install.** Everything lives in this repo as scripts and manifests and deploys identically to the home desktop and the 32 GB office machine; when real server hardware arrives, the same manifests move to a multi-node OKD cluster (Phase 6).
+## This machine — `pc`
 
-## Questions & answers
+| | Detected |
+|---|---|
+| CPU | 12th Gen Intel i7-12700 — 20 threads, VT-x ✓ |
+| RAM | 31 GiB |
+| OS | Ubuntu 24.04 (noble), kernel 6.17 |
+| Cluster storage | **`/media/hzhou/HSA` — 22 TB ext4** (`sdc2`), the cloud's PVC backing disk |
+| Other disks | NVMe 476 GB (root, holds RKE2 control plane) · `HZR` 5.5 TB exfat · `HZU` 16.4 TB exfat (both ~90 % full) |
+| Platform | **RKE2 v1.35.6** (bare-metal), ingress-nginx, `local-path` StorageClass on HSA |
 
-**Q: Can Ubuntu keep running on the desktop while a private cloud runs on the same machine?**
-**A: Yes — that is the core design.** The cloud is a genuine single-node OpenShift cluster inside a KVM virtual machine (OpenShift Local / CRC). Ubuntu is never modified or replaced: you boot the cloud with `crc start` when you need it and reclaim the RAM with `crc stop` when you don't, and cluster state persists across stops. On the 32 GB office machine coexistence is comfortable (18 GB to the cloud, ~14 GB left for the desktop); on the 15 GiB home desktop it works but you should close heavy apps while the cloud runs.
+**RAM is the binding constraint.** 31 GiB cannot run the full NERC stack (ClickHouse 2.3 TiB + 2× Elasticsearch + MinIO + Postgres + services) simultaneously — the web/API and lighter services run fine; the heavy analytics stores run one-at-a-time or trimmed. The i7-12700 boards take **128 GB DDR4/5** — that upgrade is the single highest-leverage improvement and removes the wall entirely.
 
-**Q: Can I test all the local OpenShift services and migrate my NERC pods and services onto it?**
-**A: Yes.** CRC is a real OpenShift 4 cluster — web console, operators, internal image registry, RBAC, builds, routes all work locally. Migration from NERC is a standard, supported path done in Phase 3: export each NERC namespace's manifests (`scripts/30-export-nerc.sh`), mirror the container images with `skopeo`/`oc image mirror`, copy volume data with `oc rsync`, scrub cluster-specific fields, and re-apply here. **Do the export while NERC is still reachable.**
+## What HCloud is for
 
-**Q: What are the limits?**
-**A:** Single-node and RAM-bound: many users can have accounts, but simultaneous heavy workloads are limited (~2–3 on the home desktop, roughly double on the office machine). OpenStack-style user VMs and GPU notebooks are deferred phases, not day-one features. Details in "Honest limits" below.
+1. **A landing zone for the NERC project `favor-4ee4be`** (the genohub.org research platform). NERC is shutting down; HCloud gives every workload, config, and data volume a place to keep running.
+2. **A public research cloud.** Once data is migrated, HCloud serves the site publicly under `genohub.org` via **cert-manager (Let's Encrypt) + Cloudflare Tunnel** — no static IP or router port-forwarding required.
+3. **A portable, scripted platform.** Everything lives in this repo as numbered scripts + converted manifests, reproducible on new/larger hardware.
 
-## Is this possible on these machines?
+## Architecture
 
-**Yes — with honest limits.** The approach is **OpenShift Local (CRC)**: a genuine single-node OpenShift cluster inside a KVM virtual machine. You boot it when you need it (`crc start`) and shut it down when you don't (`crc stop`), and Ubuntu stays untouched. Everything NERC-critical for migration testing works: the OpenShift web console, `oc` CLI, Deployments/Services/Routes, the internal image registry, RBAC, projects and quotas.
+```
+Internet ── Cloudflare Tunnel ── ingress-nginx ── Services ── Pods (favor-4ee4be)
+                                                                  │
+                          local-path PVCs  ──────────────────────┘
+                          on /media/hzhou/HSA (22 TB ext4)
+```
 
-### Deployment targets
+- **RKE2** bare-metal on the host (control plane on NVMe root).
+- **Storage:** Rancher `local-path-provisioner`, default StorageClass, PV data on the 22 TB HSA disk.
+- **Ingress:** ingress-nginx (ships with RKE2); OpenShift Routes → Ingress.
+- **Public edge:** Cloudflare Tunnel + cert-manager (planned final phase).
 
-HCloud deploys from this one repo to **two machines**; `scripts/01-install-crc.sh` auto-detects the host RAM and applies the right profile.
+## Migration from NERC (favor-4ee4be)
 
-| | Home desktop (this repo's dev machine) | Office machine |
-|---|---|---|
-| CPU | i7-6700 — 4 cores / 8 threads, VT-x ✓ | (record when deploying) |
-| Host RAM | 15 GiB (desktop uses ~8 GiB) | 32 GB |
-| Storage | ~8 TB (1.8 TB + 5.5 TB HDDs, 2× 224 GB SSDs, 238 GB NVMe) | 22 TB |
-| Profile | **home**: 6 vCPU / 10.5 GiB / 60 GiB VM | **office**: 6 vCPU / 18 GiB / 120 GiB VM |
-| Desktop coexistence | Tight — close heavy apps before `crc start` | Comfortable — desktop keeps ~14 GB |
-| Role | Migration testing, pilot | Primary department platform; Phase 6 features (VMs, more users) viable sooner |
-| GPU | GTX 1080 (drives the display) — Phase 5 optional | (record when deploying) |
+The source is a **live** OpenShift project (~7.0 TiB across 9 PVCs; MinIO 2.9 TB, ClickHouse 2.3 TB, RocksDB 1.7 TB dominate). Approach:
 
-### Honest limits (read before deploying)
+1. **Export** every resource from NERC → `docs/Secretes/migration/favor-4ee4be/raw/` *(git-ignored — contains secrets)*.
+2. **Convert** OpenShift → clean Kubernetes: strip cluster-specific fields, drop OpenShift-generated secrets, `Route`→`Ingress`, `storageClassName`→`local-path`. → `scripts/50-convert-manifests.py`
+3. **Apply** structure to RKE2 (workloads at `replicas: 0` until data lands).
+4. **Copy data** while NERC stays up (live, point-in-time):
+   - **MinIO** via in-cluster `rclone` over the S3 route (fast, parallel, resumable).
+   - **Postgres** via `pg_dump`/`pg_restore`.
+   - File volumes via a **mover pod + `tar` stream** (`scripts/60-migrate-volume.sh`); big immutable stores sharded into parallel streams (`scripts/61-migrate-bigvol.sh`).
+   - **Elasticsearch** via snapshot API (live Lucene can't be `tar`'d consistently).
+5. **Cutover delta-sync** when ready to switch off NERC → exact 1:1.
 
-1. **Concurrency, not head-count, is the limit.** 10+ department users can have accounts, projects, and quotas — but simultaneous heavy workloads are bounded by the host: ~2–3 on the home desktop, roughly double that on the 32 GB office machine. This is a migration target and pilot platform, not a production datacenter.
-2. **RAM is the binding constraint on the home desktop.** The i7-6700 supports up to 64 GB DDR4; a ~$60–100 upgrade is the single highest-leverage improvement there. The office machine's 32 GB is already comfortable.
-3. **OpenStack-style VMs (OpenShift Virtualization) need nested virtualization inside an already-tight VM** — deferred to Phase 6 (after RAM upgrade).
-4. **GPU notebooks** require passing the GTX 1080 into the cluster VM (VFIO) and moving the desktop display to the Intel HD 530 iGPU — doable, but optional Phase 5.
-5. CRC is licensed/designed by Red Hat as a development/testing cluster. For a department-grade deployment later, Phase 6 moves the same manifests to multi-node **OKD** on real server hardware — nothing built here is throwaway.
+Live status is tracked in `docs/Secretes/migration/STATUS.md`.
 
----
+## Scripts
 
-## NERC feature mapping
+| Script | Purpose |
+|---|---|
+| `scripts/00-prereqs.sh` | Host virtualization/prereqs (legacy CRC path; kept for reference) |
+| `scripts/40-install-rke2.sh` | **Install RKE2 bare-metal, retire CRC, put `local-path` storage on the 22 TB HSA disk** |
+| `scripts/50-convert-manifests.py` | Convert exported OpenShift manifests → clean Kubernetes (Routes→Ingress, etc.) |
+| `scripts/60-migrate-volume.sh` | Copy one live NERC volume → local PVC via a mover pod + tar stream |
+| `scripts/61-migrate-bigvol.sh` | Sharded parallel transfer for large immutable stores (ClickHouse, RocksDB) |
+| `scripts/30-export-nerc.sh` | Export a NERC namespace's manifests |
+| `scripts/01-install-crc.sh`, `20-lan-access.sh` | Legacy CRC-era scripts (superseded by RKE2) |
 
-| NERC service | HCloud equivalent | Phase |
-|---|---|---|
-| OpenShift container platform | OpenShift Local (CRC) single-node cluster | 1 |
-| Web console, `oc`, Routes, builds | Included in CRC | 1 |
-| Projects, quotas, RBAC, multi-user | htpasswd users + per-project ResourceQuotas | 2 |
-| Object storage (S3 / Swift) | MinIO on the 5.5 TB HDD, exposed to cluster + LAN | 2 |
-| Shared filesystems (NFS) | NFS export from host HDDs into cluster PVs | 2 |
-| Your NERC pods & services | Migrated via manifest export + image mirroring | 3 |
-| RHOAI / JupyterLab workbenches | JupyterHub on the cluster (CPU first) | 4 |
-| GPU workloads | GTX 1080 via VFIO passthrough + NVIDIA GPU operator | 5 (optional) |
-| Keycloak SSO | Keycloak operator, replaces htpasswd | 6 |
-| OpenStack VMs | OpenShift Virtualization (KubeVirt) | 6 (needs RAM) |
-| ColdFront allocations | ColdFront container pointed at the cluster | 6 |
+## Quick start (fresh machine)
 
----
+```bash
+# 1. Install RKE2 + storage on the big disk
+bash scripts/40-install-rke2.sh
+export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+export PATH=/var/lib/rancher/rke2/bin:$PATH
+kubectl get nodes                       # node Ready
 
-## Deployment plan
+# 2. Export from NERC, convert, apply (see docs/Secretes/migration/RESUME.md)
+python3 scripts/50-convert-manifests.py
+kubectl apply -f docs/Secretes/migration/favor-4ee4be/clean/
 
-### Phase 0 — Prepare the host (~15 min, needs sudo)
+# 3. Migrate data, then scale workloads up to original replicas
+```
 
-1. Install virtualization stack: `libvirt-daemon-system`, `qemu-kvm`, `virt-manager`, and NetworkManager integration. → `scripts/00-prereqs.sh`
-2. Add user to `libvirt` group (re-login required).
-3. **Manual step (only you can do this):** get a free Red Hat pull secret — create a no-cost Red Hat developer account and download the pull secret from <https://console.redhat.com/openshift/create/local>. Save it as `~/pull-secret.txt`. *(Fallback if account creation is a problem: the OKD preset needs no pull secret but tracks community builds.)*
-4. Free up RAM: the desktop currently uses ~8 GiB with swap already under pressure — close browsers/IDEs before starting the cluster.
+## Honest limits
 
-### Phase 1 — Install and start OpenShift (~30–60 min, mostly download)
-
-1. Download the `crc` binary from the public OpenShift mirror. → `scripts/01-install-crc.sh`
-2. The script auto-sizes the cluster VM by host RAM — **home** profile: 6 vCPU / 10.5 GiB / 60 GiB; **office** profile: 6 vCPU / 18 GiB / 120 GiB (override with `HCLOUD_CPUS` / `HCLOUD_MEMORY_MIB` / `HCLOUD_DISK_GIB`). The VM disk lives under `~/.crc`; relocatable to a bigger drive via symlink.
-3. `crc setup` (one-time host prep) then `crc start -p ~/pull-secret.txt`.
-4. Verify: log into the console at `https://console-openshift-console.apps-crc.testing` (credentials from `crc console --credentials`) and run `oc get nodes`.
-
-**Daily driving:** `crc start` to boot HCloud, `crc stop` to get your RAM back. State persists across stops.
-
-### Phase 2 — Make it a platform, not just a cluster
-
-1. **Users:** create htpasswd identity provider; one account per department user; remove kubeadmin from daily use. → `manifests/users/`
-2. **Projects & quotas:** per-user/per-group projects with `ResourceQuota` + `LimitRange` mirroring NERC's allocation feel. → `manifests/quotas/`
-3. **Object storage:** MinIO running on the host (systemd) with data on the 5.5 TB HDD (`/dev/sdd`), S3 API reachable from cluster pods and the LAN — replaces NERC's Swift/S3.
-4. **Shared storage:** NFS export from the 1.8 TB HDD; `nfs-subdir-external-provisioner` in-cluster so PVCs "just work".
-5. **LAN access for department users:** CRC binds to localhost by default; an HAProxy reverse proxy on the host forwards ports 80/443/6443 so colleagues on the Harvard network reach the console, API, and app routes from their own machines. → `scripts/20-lan-access.sh`
-
-### Phase 3 — Migrate pods & services from NERC
-
-Do this **before NERC terminates** — the source cluster must still be reachable.
-
-1. **Inventory:** `oc get all,cm,secret,pvc,route -o yaml` per NERC namespace → `migration/<namespace>/` in this repo. → `scripts/30-export-nerc.sh`
-2. **Images:** mirror container images from NERC's internal registry (and any external registries) to HCloud's internal registry with `skopeo copy` / `oc image mirror`.
-3. **Manifests:** scrub cluster-specific fields (UIDs, clusterIP, NERC route hosts, storage classes) and re-apply to HCloud projects. Route hosts become `*.apps-crc.testing` (or a LAN domain via nip.io).
-4. **Data:** for each NERC PVC, `oc rsync` the data out of a running pod on NERC and into the matching pod/PVC on HCloud.
-5. **Verify:** every migrated service answers on its new route; document per-service results in `migration/REPORT.md`.
-
-### Phase 4 — Jupyter/ML workbenches (NERC RHOAI feel)
-
-1. Deploy **JupyterHub** (zero-to-jupyterhub Helm chart) on the cluster with per-user notebook pods, CPU-only at first, home directories on the NFS provisioner.
-2. Culling/idle timeouts so notebooks release the scarce RAM.
-
-### Phase 5 — GPU (optional, invasive)
-
-1. Move the Ubuntu display to the Intel HD 530 iGPU (BIOS setting + Xorg config).
-2. Bind the GTX 1080 to VFIO and pass it through to the cluster VM.
-3. Install the NVIDIA GPU operator; expose the GPU to JupyterHub profiles.
-   *Skip this phase if desktop stability matters more than in-cluster GPU.*
-
-### Phase 6 — Scale beyond this box (when hardware/RAM arrives)
-
-1. RAM to 64 GB → raise cluster VM to 32+ GiB; enable **OpenShift Virtualization** for OpenStack-style user VMs.
-2. **Keycloak** SSO (replacing htpasswd) and **ColdFront** for NERC-style allocation management.
-3. Additional machines → migrate the same manifests from CRC to a multi-node **OKD** cluster. Everything in `manifests/` is portable by design.
-
----
+1. **RAM (31 GiB)** can't run all heavy databases at once — upgrade to 128 GB for the full stack.
+2. **Storage speed:** the 22 TB disk is a single spinning HDD (~130–180 MB/s sequential) — it, not the network, caps bulk transfer.
+3. **Single node:** no HA. A production public site on one box means downtime during power/network/hardware events — acceptable for a research pilot, not a datacenter.
+4. **CRC files** (`docs/DEPLOYMENT-STATUS.md`, `01-install-crc.sh`) reflect the earlier OpenShift-Local approach, kept for history.
 
 ## Repository layout
 
 ```
-README.md            ← this plan
-scripts/             ← numbered, idempotent setup scripts (run in order)
-manifests/           ← Kubernetes/OpenShift YAML applied to the cluster (portable to OKD later)
-migration/           ← exported NERC namespaces + migration report
-docs/                ← runbooks: daily ops, troubleshooting, LAN access
-```
-
-## Quick start (once Phase 0–1 are done)
-
-```bash
-crc start                      # boot HCloud
-eval $(crc oc-env)             # get the oc CLI on PATH
-oc get nodes                   # verify
-crc console                    # open the web console
-crc stop                       # shut down, reclaim RAM
+README.md            ← this document
+scripts/             ← numbered setup + migration scripts
+docs/                ← runbooks (DEPLOYMENT-STATUS.md)
+docs/Secretes/       ← git-ignored: credentials, pull secret, migration exports/status
 ```

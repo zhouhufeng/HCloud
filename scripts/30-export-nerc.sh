@@ -8,13 +8,14 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ $# -ge 1 ] || { echo "usage: $0 <namespace> [namespace...]"; exit 1; }
 
 for ns in "$@"; do
-  out="$REPO_ROOT/migration/$ns"
+  # Exports include Secrets/ConfigMaps -> land under the git-ignored path.
+  out="$REPO_ROOT/docs/Secretes/migration/$ns/raw"
   mkdir -p "$out"
   echo "==> Exporting namespace $ns to $out"
 
   for kind in deployment deploymentconfig statefulset daemonset cronjob job \
               service route configmap secret pvc serviceaccount rolebinding \
-              imagestream buildconfig hpa networkpolicy; do
+              role imagestream buildconfig hpa networkpolicy pdb ingress; do
     if oc get "$kind" -n "$ns" -o name 2>/dev/null | grep -q .; then
       oc get "$kind" -n "$ns" -o yaml > "$out/$kind.yaml"
       echo "    $kind: $(oc get "$kind" -n "$ns" -o name | wc -l)"

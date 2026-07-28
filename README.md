@@ -1,44 +1,71 @@
 # HCloud — A Local Private Cloud to Replace NERC
 
-HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. It runs a **production Kubernetes cluster (RKE2) bare-metal on a Linux workstation**, so the group's NERC OpenShift project — pods, services, databases, object storage, and ~7 TiB of data — can be migrated, kept running, and **served publicly** on hardware we own.
+HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. The group's NERC OpenShift project — pods, services, databases, object storage, and ~7–8 TiB of data — is migrated, kept running, and **served publicly** on hardware we own.
 
-> **Platform note (2026-07):** the project originally targeted OpenShift Local (CRC). We **pivoted to RKE2** because CRC is a Red-Hat *development/testing* tool — single-node, ephemeral, not supported for public production serving. RKE2 is a CNCF-certified, production-grade Kubernetes that runs bare-metal (no VM overhead), frees ~8–10 GB of RAM for workloads, and can serve the public website. OpenShift `Route` objects are converted to Kubernetes `Ingress`; everything else applies unchanged.
+HCloud now has **two deployment platforms** in this one repo:
+
+| Platform | Machine | Stack | Status |
+|---|---|---|---|
+| **Linux path** | `pc` — i7-12700, 31 GiB RAM, 22 TB HSA disk | **RKE2** bare-metal Kubernetes, ingress-nginx, Routes→Ingress | migration in progress (`docs/Secretes/migration/STATUS.md` on that box) |
+| **Mac path (primary production)** | **Mac Studio** — Apple Silicon Ultra, **128 GiB RAM**, 20 TiB `/Volumes/HSZ` | **OpenShift Local (CRC)** — real OpenShift 4.22, native Routes/BuildConfigs, RHOAI-equivalent services | cluster up 2026-07-28; see `docs/mac-studio-runbook.md` |
+
+> **Why two platforms?** The Linux box (31 GiB RAM) can't run the full NERC stack at once, so it pivoted to lean bare-metal RKE2 (no VM overhead) — see the platform note below. The Mac Studio has 128 GiB and can afford a **real OpenShift** cluster (96 GiB VM), which keeps everything NERC-native: `oc`, Routes, ImageStreams, BuildConfigs, the web console, and the RHOAI-style data-science stack. Both paths serve the public site via Cloudflare Tunnel + cert-manager.
+
+> **Platform note for the Linux `pc` box (2026-07):** CRC there was retired for **RKE2** — CRC is a development-scale tool and the 31 GiB host needed the ~8–10 GB the VM cost. OpenShift `Route` objects are converted to `Ingress` (`scripts/50-convert-manifests.py`); everything else applies unchanged. On the Mac Studio, RAM is abundant, so CRC's convenience (true OpenShift API parity with NERC) wins — no manifest conversion beyond host names.
 
 ## HCloud vs. NERC — differences & benefits
 
-| Dimension | **NERC** (source) | **HCloud** (this build) |
-|---|---|---|
-| Platform | Managed OpenShift 4 | RKE2 (CNCF-certified Kubernetes), self-managed |
-| Topology | Multi-node datacenter (`wrk-0…wrk-35`) | **Single node** — one workstation (`pc`) |
-| Location | MGHPCC datacenter | Your office/workstation |
-| Compute | Distributed across many nodes | i7-12700 (20 threads), **31 GiB RAM** |
-| Storage | Ceph RBD — distributed, replicated | `local-path` on a **single 22 TB HDD** (no replication) |
-| Networking | Platform Routes + managed DNS/TLS | ingress-nginx + Cloudflare Tunnel + cert-manager |
-| Operations | Fully managed by NERC staff | Self-operated (this repo's scripts) |
-| Cost | Grant/allocation-based | **Hardware you already own** — no recurring bill |
-| Lifecycle | **Being decommissioned** | Persists as long as you run it |
-| API / CLI | `oc`, Routes / SCC / ImageStreams | `kubectl`, standard Ingress (Routes auto-converted) |
+| Dimension | **NERC** (source) | **HCloud Linux `pc`** | **HCloud Mac Studio** |
+|---|---|---|---|
+| Platform | Managed OpenShift 4 | RKE2 (CNCF Kubernetes), self-managed | OpenShift Local (CRC) 4.22 — real OpenShift |
+| Topology | Multi-node datacenter (`wrk-0…wrk-35`) | Single node, bare-metal | Single node, 96 GiB VM |
+| Compute | Distributed | i7-12700 (20 threads), **31 GiB** | Apple Silicon Ultra (20 cores), **128 GiB** |
+| Storage | Ceph RBD — replicated | `local-path` on 22 TB HDD | CRC provisioner on 20 TiB `/Volumes/HSZ` (4 TiB VM disk) |
+| Networking | Routes + managed DNS/TLS | ingress-nginx + Cloudflare Tunnel + cert-manager | native Routes + Cloudflare Tunnel + cert-manager |
+| API / CLI | `oc`, Routes/SCC/ImageStreams | `kubectl`, Ingress (Routes converted) | `oc`, Routes/ImageStreams/BuildConfigs unchanged |
+| Operations | Managed by NERC staff | Self-operated (this repo) | Self-operated (this repo) |
+| Cost | Grant/allocation-based | Hardware you own | Hardware you own |
+| Lifecycle | **Being decommissioned** | Persists as long as you run it | Persists as long as you run it |
 
 **Benefits**
 
 - **Continuity** — NERC is shutting down; HCloud keeps `favor-4ee4be` / genohub.org running.
-- **Ownership & zero recurring cost** — no allocations to renew, no cloud invoice, no egress fees on ~7 TiB.
+- **Ownership & zero recurring cost** — no allocations to renew, no cloud invoice, no egress fees on ~8 TiB.
 - **Full control** — root/admin over the whole stack; snapshot, experiment, reconfigure with no imposed quotas.
-- **Data locality** — all 7 TiB on local disk, LAN-speed and free to access.
+- **Data locality** — all data on local disk, LAN-speed and free to access.
 - **Public hosting without a static IP** — Cloudflare Tunnel serves it publicly with free TLS, no port-forwarding.
 - **Reproducible & portable** — fully scripted; redeploys onto bigger hardware with no rework.
-- **Native architecture match** — both x86_64, so the custom images run unchanged.
 
 **Honest trade-offs (vs NERC)**
 
 - **No high availability** — one box is a single point of failure; expect downtime during power/network/hardware/update events. Fine for a research pilot, not a 99.9 %-uptime datacenter.
-- **RAM-bound (31 GiB)** — the heavy stack (ClickHouse + 2× Elasticsearch + MinIO) can't all run at once until RAM is upgraded. A **128 GB upgrade** removes this wall and is the highest-leverage next step.
-- **No storage redundancy** — a single HDD has no replication, so **a disk failure = data loss**; keep a backup/offsite copy. It's also slower (~130–180 MB/s) than Ceph.
+- **No storage redundancy** — single-disk PV backing on both machines; **a disk failure = data loss**; keep a backup copy.
 - **You're the operator now** — upgrades, monitoring, and incident response move from NERC staff to you (mitigated by the repo's scripts).
+- **Linux `pc` is RAM-bound (31 GiB)** — heavy analytics stores run one-at-a-time there until a 128 GB upgrade. The **Mac Studio does not have this wall** (96 GiB cluster).
+- **No GPU on the Mac** — Apple Metal isn't exposed to Linux containers; GPU workloads stay a gap on both machines for now.
 
-**Bottom line:** HCloud trades NERC's managed resilience and elastic capacity for **ownership, control, zero cost, and survival past NERC's shutdown**. Two follow-ups make it robust: **more RAM (128 GB)** to run the full stack, and a **backup copy** of the 22 TB disk to cover the single-drive risk.
+## Mac Studio — primary production target
 
-## This machine — `pc`
+Full runbook: **`docs/mac-studio-runbook.md`**. NERC-service parity mapping:
+
+| NERC service | HCloud equivalent (Mac Studio) | Script |
+|---|---|---|
+| OpenShift container platform | CRC — 16 vCPU / 96 GiB / 4 TiB on `/Volumes/HSZ` | 61 |
+| Web console, `oc`, Routes, builds, image registry | Included in CRC | 61 |
+| Public app URLs (`*.apps.shift.nerc.mghpcc.org`) | Cloudflare Tunnel → `*.<your-domain>` | 62 |
+| TLS certificates | cert-manager + Let's Encrypt (Cloudflare DNS-01) | 63 |
+| Block storage (`ocs-external-storagecluster-ceph-rbd`) | StorageClass **alias with the same name** → CRC provisioner | 64 |
+| Object storage (MinIO S3) | MinIO operator | 64 |
+| Projects, quotas, RBAC, multi-user (ColdFront feel) | htpasswd users + per-project ResourceQuota/LimitRange | 65 |
+| RHOAI (JupyterLab, workbenches, KServe model serving) | OpenDataHub operator (RHOAI upstream) | 66 |
+| Serverless Computing (Knative) | OpenShift Serverless operator | 66 |
+| CI/CD Pipeline | OpenShift Pipelines (Tekton) operator | 66 |
+| Cluster monitoring (Prometheus/Grafana) | CRC cluster-monitoring enabled at install | 61 |
+| Your NERC pods & services | Export → convert → apply → data rsync → scale up | 30, 67–69 |
+| Keycloak/CILogon SSO | follow-up after public URL exists (htpasswd first) | — |
+| GPU workloads | **not available on Apple Silicon** (honest gap) | — |
+
+## The Linux machine — `pc`
 
 | | Detected |
 |---|---|
@@ -49,7 +76,7 @@ HCloud is a self-hosted replacement for the terminating [NERC (New England Resea
 | Other disks | NVMe 476 GB (root, holds RKE2 control plane) · `HZR` 5.5 TB exfat · `HZU` 16.4 TB exfat (both ~90 % full) |
 | Platform | **RKE2 v1.35.6** (bare-metal), ingress-nginx, `local-path` StorageClass on HSA |
 
-**RAM is the binding constraint.** 31 GiB cannot run the full NERC stack (ClickHouse 2.3 TiB + 2× Elasticsearch + MinIO + Postgres + services) simultaneously — the web/API and lighter services run fine; the heavy analytics stores run one-at-a-time or trimmed. The i7-12700 boards take **128 GB DDR4/5** — that upgrade is the single highest-leverage improvement and removes the wall entirely.
+**RAM is the binding constraint on `pc`.** 31 GiB cannot run the full NERC stack (ClickHouse 2.3 TiB + 2× Elasticsearch + MinIO + Postgres + services) simultaneously — the web/API and lighter services run fine; the heavy analytics stores run one-at-a-time or trimmed. The i7-12700 boards take **128 GB DDR4/5** — that upgrade removes the wall entirely.
 
 ## What HCloud is for
 
@@ -60,73 +87,80 @@ HCloud is a self-hosted replacement for the terminating [NERC (New England Resea
 ## Architecture
 
 ```
-Internet ── Cloudflare Tunnel ── ingress-nginx ── Services ── Pods (favor-4ee4be)
+Linux pc:   Internet ── Cloudflare Tunnel ── ingress-nginx ── Services ── Pods
                                                                   │
-                          local-path PVCs  ──────────────────────┘
-                          on /media/hzhou/HSA (22 TB ext4)
-```
+                              local-path PVCs on /media/hzhou/HSA (22 TB)
 
-- **RKE2** bare-metal on the host (control plane on NVMe root).
-- **Storage:** Rancher `local-path-provisioner`, default StorageClass, PV data on the 22 TB HSA disk.
-- **Ingress:** ingress-nginx (ships with RKE2); OpenShift Routes → Ingress.
-- **Public edge:** Cloudflare Tunnel + cert-manager (planned final phase).
+Mac Studio: Internet ── Cloudflare Tunnel ── OpenShift Router ── Routes ── Pods
+                                                                  │
+                              CRC PVCs in 4 TiB VM disk on /Volumes/HSZ (20 TiB)
+```
 
 ## Migration from NERC (favor-4ee4be)
 
-The source is a **live** OpenShift project (~7.0 TiB across 9 PVCs; MinIO 2.9 TB, ClickHouse 2.3 TB, RocksDB 1.7 TB dominate). Approach:
+The source is a **live** OpenShift project (~7–8 TiB across 9 PVCs; MinIO ~3 TB, ClickHouse ~2.4 TB, RocksDB ~1.8 TB dominate). Approach:
 
-1. **Export** every resource from NERC → `docs/Secretes/migration/favor-4ee4be/raw/` *(git-ignored — contains secrets)*.
-2. **Convert** OpenShift → clean Kubernetes: strip cluster-specific fields, drop OpenShift-generated secrets, `Route`→`Ingress`, `storageClassName`→`local-path`. → `scripts/50-convert-manifests.py`
-3. **Apply** structure to RKE2 (workloads at `replicas: 0` until data lands).
-4. **Copy data** while NERC stays up (live, point-in-time):
-   - **MinIO** via in-cluster `rclone` over the S3 route (fast, parallel, resumable).
-   - **Postgres** via `pg_dump`/`pg_restore`.
-   - File volumes via a **mover pod + `tar` stream** (`scripts/60-migrate-volume.sh`); big immutable stores sharded into parallel streams (`scripts/61-migrate-bigvol.sh`).
-   - **Elasticsearch** via snapshot API (live Lucene can't be `tar`'d consistently).
-5. **Cutover delta-sync** when ready to switch off NERC → exact 1:1.
-
-Live status is tracked in `docs/Secretes/migration/STATUS.md`.
+1. **Export** every resource from NERC → `docs/Secretes/migration/favor-4ee4be/raw/` *(git-ignored — contains secrets)*. → `scripts/30-export-nerc.sh`
+2. **Convert:**
+   - Linux/RKE2: OpenShift → clean Kubernetes (Routes→Ingress, `local-path`). → `scripts/50-convert-manifests.py`
+   - Mac/CRC: OpenShift → OpenShift (only strip cluster fields + rewrite Route hosts). → `scripts/67-migrate-to-crc.py`
+3. **Apply** structure (workloads at `replicas: 0` until data lands).
+4. **Copy data** while NERC stays up: mover-pod tar streams (`60/61-migrate-*.sh` on Linux; `68-rsync-nerc-data.sh` on Mac); MinIO via rclone; Postgres via `pg_dump`; Elasticsearch via snapshot API.
+5. **Cutover delta-sync**, scale up (`scripts/69-scale-up.sh`), rotate NERC tokens.
 
 ## Scripts
 
-| Script | Purpose |
-|---|---|
-| `scripts/00-prereqs.sh` | Host virtualization/prereqs (legacy CRC path; kept for reference) |
-| `scripts/40-install-rke2.sh` | **Install RKE2 bare-metal, retire CRC, put `local-path` storage on the 22 TB HSA disk** |
-| `scripts/50-convert-manifests.py` | Convert exported OpenShift manifests → clean Kubernetes (Routes→Ingress, etc.) |
-| `scripts/60-migrate-volume.sh` | Copy one live NERC volume → local PVC via a mover pod + tar stream |
-| `scripts/61-migrate-bigvol.sh` | Sharded parallel transfer for large immutable stores (ClickHouse, RocksDB) |
-| `scripts/30-export-nerc.sh` | Export a NERC namespace's manifests |
-| `scripts/01-install-crc.sh`, `20-lan-access.sh` | Legacy CRC-era scripts (superseded by RKE2) |
+| Script | Path | Purpose |
+|---|---|---|
+| `00-prereqs.sh`, `01-install-crc.sh`, `20-lan-access.sh` | Linux | Legacy CRC-era scripts (superseded on `pc` by RKE2) |
+| `30-export-nerc.sh` | both | Export a NERC namespace's manifests (→ git-ignored path) |
+| `40-install-rke2.sh` | Linux | Install RKE2 bare-metal, storage on the 22 TB HSA disk |
+| `50-convert-manifests.py` | Linux | Convert OpenShift manifests → clean Kubernetes (Routes→Ingress) |
+| `60-migrate-volume.sh` | Linux | Copy one live NERC volume → local PVC via mover pod + tar stream |
+| `61-migrate-bigvol.sh` | Linux | Sharded parallel transfer for large immutable stores |
+| `60-mac-prereqs.sh` | **Mac** | Homebrew + crc/oc/helm/cloudflared/htpasswd/jq |
+| `61-install-crc-mac.sh` | **Mac** | CRC mac-studio profile (16 vCPU / 96 GiB / 4 TiB), `~/.crc` → `/Volumes/HSZ`, daemon workaround |
+| `62-cloudflared-tunnel.sh` | **Mac** | Cloudflare Tunnel (launchd) → OpenShift router, wildcard DNS |
+| `63-cert-manager.sh` | **Mac** | cert-manager + Let's Encrypt wildcard via Cloudflare DNS-01 |
+| `64-storage-parity.sh` | **Mac** | NERC StorageClass-name alias + MinIO operator |
+| `65-users-quotas.sh` | **Mac** | htpasswd IdP, per-user projects, NERC-style quotas |
+| `66-nerc-services.sh` | **Mac** | OpenDataHub + OpenShift Serverless + Pipelines operators |
+| `67-migrate-to-crc.py` | **Mac** | Convert raw NERC export → CRC-ready manifests (Routes kept) |
+| `68-rsync-nerc-data.sh` | **Mac** | Per-PVC data copy NERC→CRC via helper pods (resumable) |
+| `69-scale-up.sh` | **Mac** | Restore original replica counts after data migration |
 
-## Quick start (fresh machine)
+## Quick start
 
 ```bash
-# 1. Install RKE2 + storage on the big disk
+# ----- Linux pc (RKE2) -----
 bash scripts/40-install-rke2.sh
-export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
-export PATH=/var/lib/rancher/rke2/bin:$PATH
-kubectl get nodes                       # node Ready
-
-# 2. Export from NERC, convert, apply (see docs/Secretes/migration/RESUME.md)
+export KUBECONFIG=/etc/rancher/rke2/rke2.yaml PATH=/var/lib/rancher/rke2/bin:$PATH
 python3 scripts/50-convert-manifests.py
 kubectl apply -f docs/Secretes/migration/favor-4ee4be/clean/
 
-# 3. Migrate data, then scale workloads up to original replicas
+# ----- Mac Studio (CRC / OpenShift) -----
+bash scripts/60-mac-prereqs.sh          # tools (or install the official CRC pkg)
+bash scripts/61-install-crc-mac.sh      # cluster up on /Volumes/HSZ
+bash scripts/64-storage-parity.sh       # NERC storage-class alias + MinIO
+HCLOUD_USERS='hzhou' bash scripts/65-users-quotas.sh
+bash scripts/66-nerc-services.sh        # ODH / Serverless / Pipelines
+python3 scripts/67-migrate-to-crc.py --ns favor-4ee4be
+oc apply -f docs/Secretes/migration/favor-4ee4be/crc/
+# then: 68 (data), 69 (scale up); 62-63 for public serving
 ```
 
 ## Honest limits
 
-1. **RAM (31 GiB)** can't run all heavy databases at once — upgrade to 128 GB for the full stack.
-2. **Storage speed:** the 22 TB disk is a single spinning HDD (~130–180 MB/s sequential) — it, not the network, caps bulk transfer.
-3. **Single node:** no HA. A production public site on one box means downtime during power/network/hardware events — acceptable for a research pilot, not a datacenter.
-4. **CRC files** (`docs/DEPLOYMENT-STATUS.md`, `01-install-crc.sh`) reflect the earlier OpenShift-Local approach, kept for history.
+1. **Single node, no HA** on both machines — downtime during power/network/hardware events; acceptable for a research pilot.
+2. **Single-disk storage** — no replication; keep backups. HDD on `pc` (~130–180 MB/s) caps bulk transfer; the Mac's Thunderbolt SSD volume is much faster.
+3. **Linux `pc` is RAM-bound** until a 128 GB upgrade; the Mac Studio is not.
+4. **No GPU workloads** on either box today (no NVIDIA hardware in the Mac; GTX 1080 passthrough on the home desktop was never promoted past optional).
 
 ## Repository layout
 
 ```
 README.md            ← this document
-scripts/             ← numbered setup + migration scripts
-docs/                ← runbooks (DEPLOYMENT-STATUS.md)
+scripts/             ← numbered setup + migration scripts (Linux + Mac chains)
+docs/                ← runbooks: DEPLOYMENT-STATUS.md, mac-studio-runbook.md
 docs/Secretes/       ← git-ignored: credentials, pull secret, migration exports/status
 ```

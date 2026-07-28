@@ -1,5 +1,26 @@
 # Deployment status
 
+## Mac Studio — PRIMARY production target (started 2026-07-26)
+
+Apple Silicon Ultra, 20 cores, 128 GiB RAM, 20 TiB Thunderbolt volume `/Volumes/HSZ`.
+Goal: full NERC replacement incl. public website hosting. Runbook: `docs/mac-studio-runbook.md`.
+
+| Step | Status |
+|---|---|
+| CLI tools (oc 4.22, kubectl, helm, cloudflared, jq, htpasswd) | ✅ 2026-07-17 |
+| CRC 2.62.0 installed (official pkg, GUI installer) | ✅ 2026-07-26 |
+| Red Hat pull secret at `docs/Secretes/pull-secret.txt` | ✅ 2026-07-26 |
+| `~/.crc` relocated to `/Volumes/HSZ/.crc` (symlink) | ✅ 2026-07-26 |
+| CRC configured: mac-studio profile 16 vCPU / 96 GiB / 4 TiB, monitoring on | ✅ 2026-07-26 |
+| `crc setup` + first `crc start` | ⏳ in progress 2026-07-26 (bundle download) |
+| NERC export of `favor-4ee4be` (manifests, git-ignored) | ✅ fresh as of 2026-07-26 |
+| Manifests converted for CRC (`docs/Secretes/migration/favor-4ee4be/crc/`) | ✅ 2026-07-26 |
+| Apply manifests + storage parity (64) + users (65) + services (66) | ⬜ after cluster Ready |
+| PVC data rsync from NERC (~8.1 TiB, script 68) | ⬜ needs fresh NERC token on the day |
+| Public serving: Cloudflare Tunnel (62) + cert-manager (63) | ⬜ needs domain + `cloudflared tunnel login` + CF API token |
+| Cutover + scale-up (69) + NERC token rotation | ⬜ |
+
+
 ## Primary machine — `pc` (detected 2026-07-04)
 
 Detected hardware does **not** match the earlier "home desktop (15 GiB, i7-6700)"

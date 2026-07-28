@@ -4,6 +4,40 @@ HCloud is a self-hosted replacement for the terminating [NERC (New England Resea
 
 > **Platform note (2026-07):** the project originally targeted OpenShift Local (CRC). We **pivoted to RKE2** because CRC is a Red-Hat *development/testing* tool — single-node, ephemeral, not supported for public production serving. RKE2 is a CNCF-certified, production-grade Kubernetes that runs bare-metal (no VM overhead), frees ~8–10 GB of RAM for workloads, and can serve the public website. OpenShift `Route` objects are converted to Kubernetes `Ingress`; everything else applies unchanged.
 
+## HCloud vs. NERC — differences & benefits
+
+| Dimension | **NERC** (source) | **HCloud** (this build) |
+|---|---|---|
+| Platform | Managed OpenShift 4 | RKE2 (CNCF-certified Kubernetes), self-managed |
+| Topology | Multi-node datacenter (`wrk-0…wrk-35`) | **Single node** — one workstation (`pc`) |
+| Location | MGHPCC datacenter | Your office/workstation |
+| Compute | Distributed across many nodes | i7-12700 (20 threads), **31 GiB RAM** |
+| Storage | Ceph RBD — distributed, replicated | `local-path` on a **single 22 TB HDD** (no replication) |
+| Networking | Platform Routes + managed DNS/TLS | ingress-nginx + Cloudflare Tunnel + cert-manager |
+| Operations | Fully managed by NERC staff | Self-operated (this repo's scripts) |
+| Cost | Grant/allocation-based | **Hardware you already own** — no recurring bill |
+| Lifecycle | **Being decommissioned** | Persists as long as you run it |
+| API / CLI | `oc`, Routes / SCC / ImageStreams | `kubectl`, standard Ingress (Routes auto-converted) |
+
+**Benefits**
+
+- **Continuity** — NERC is shutting down; HCloud keeps `favor-4ee4be` / genohub.org running.
+- **Ownership & zero recurring cost** — no allocations to renew, no cloud invoice, no egress fees on ~7 TiB.
+- **Full control** — root/admin over the whole stack; snapshot, experiment, reconfigure with no imposed quotas.
+- **Data locality** — all 7 TiB on local disk, LAN-speed and free to access.
+- **Public hosting without a static IP** — Cloudflare Tunnel serves it publicly with free TLS, no port-forwarding.
+- **Reproducible & portable** — fully scripted; redeploys onto bigger hardware with no rework.
+- **Native architecture match** — both x86_64, so the custom images run unchanged.
+
+**Honest trade-offs (vs NERC)**
+
+- **No high availability** — one box is a single point of failure; expect downtime during power/network/hardware/update events. Fine for a research pilot, not a 99.9 %-uptime datacenter.
+- **RAM-bound (31 GiB)** — the heavy stack (ClickHouse + 2× Elasticsearch + MinIO) can't all run at once until RAM is upgraded. A **128 GB upgrade** removes this wall and is the highest-leverage next step.
+- **No storage redundancy** — a single HDD has no replication, so **a disk failure = data loss**; keep a backup/offsite copy. It's also slower (~130–180 MB/s) than Ceph.
+- **You're the operator now** — upgrades, monitoring, and incident response move from NERC staff to you (mitigated by the repo's scripts).
+
+**Bottom line:** HCloud trades NERC's managed resilience and elastic capacity for **ownership, control, zero cost, and survival past NERC's shutdown**. Two follow-ups make it robust: **more RAM (128 GB)** to run the full stack, and a **backup copy** of the 22 TB disk to cover the single-drive risk.
+
 ## This machine — `pc`
 
 | | Detected |

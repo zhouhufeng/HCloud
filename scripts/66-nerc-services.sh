@@ -85,60 +85,39 @@ metadata:
 spec: {}
 EOF
 
-echo "==> OpenDataHub (RHOAI upstream) — JupyterLab / KServe / Model Serving parity"
-cat <<'EOF' | oc apply -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: opendatahub
----
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: opendatahub
-  namespace: opendatahub
-spec:
-  targetNamespaces:
-    - opendatahub
----
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: opendatahub-operator
-  namespace: opendatahub
-spec:
-  channel: fast
-  name: opendatahub-operator
-  source: community-operators
-  sourceNamespace: openshift-marketplace
-EOF
-wait_csv opendatahub "opendatahub-operator" "OpenDataHub"
-
-echo "==> Creating DataScienceCluster"
-cat <<'EOF' | oc apply -f -
-apiVersion: datasciencecluster.opendatahub.io/v1
-kind: DataScienceCluster
-metadata:
-  name: default-dsc
-spec:
-  components:
-    dashboard:            {managementState: Managed}
-    workbenches:          {managementState: Managed}
-    datasciencepipelines: {managementState: Managed}
-    kserve:               {managementState: Managed, serving: {managementState: Managed, name: knative-serving}}
-    modelmeshserving:     {managementState: Managed}
-    codeflare:            {managementState: Removed}
-    ray:                  {managementState: Removed}
-    kueue:                {managementState: Removed}
-    trainingoperator:     {managementState: Removed}
-    trustyai:             {managementState: Removed}
-EOF
+echo "==> JupyterHub (NERC RHOAI/JupyterLab parity)"
+# Found on this Mac (2026-07-29): the OpenDataHub operator is NOT in the
+# community-operators catalog on aarch64 — ODH images are x86_64-only, so the
+# catalog filters the package out on Apple Silicon ("no operators found in
+# package opendatahub-operator"). JupyterHub (zero-to-jupyterhub chart) is
+# multi-arch and provides the JupyterLab-workbench experience NERC users had.
+command -v helm >/dev/null || { echo "ERROR: helm missing"; exit 1; }
+helm repo add jupyterhub https://hub.jupyter.org/helm-chart/ >/dev/null 2>&1 || true
+helm repo update jupyterhub >/dev/null
+oc get ns jupyterhub >/dev/null 2>&1 || oc create ns jupyterhub
+# The chart pins runAsUser 1000/65534 + fsGroup 1000, which OpenShift's
+# restricted-v2 SCC rejects; anyuid for this namespace's SAs is the fix.
+oc adm policy add-scc-to-group anyuid system:serviceaccounts:jupyterhub
+helm upgrade --install jupyterhub jupyterhub/jupyterhub -n jupyterhub \
+  --set prePuller.hook.enabled=false --set prePuller.continuous.enabled=false \
+  --set proxy.service.type=ClusterIP \
+  --set hub.db.pvc.storageClassName=ocs-external-storagecluster-ceph-rbd \
+  --set singleuser.storage.dynamic.storageClass=ocs-external-storagecluster-ceph-rbd \
+  --set singleuser.storage.capacity=10Gi \
+  --set singleuser.memory.limit=4G --set singleuser.memory.guarantee=1G \
+  --set singleuser.cpu.limit=2 --set singleuser.cpu.guarantee=0.1 \
+  --set cull.enabled=true --set cull.timeout=3600 \
+  --timeout 10m
+oc -n jupyterhub create route edge jupyterhub --service=proxy-public --insecure-policy=Redirect 2>/dev/null || true
 
 cat <<'EOF'
 
-Done. NERC-parity operators installed. Give the pods ~5 min to settle, then:
+Done. NERC-parity services installed. Give the pods ~5 min to settle, then:
   - Pipelines : oc get tektonconfig
   - Serverless: oc -n knative-serving get pods
-  - RHOAI/ODH : oc get route -n opendatahub          (the dashboard route)
-GPU workbench profiles are intentionally disabled on this box (no NVIDIA GPU).
+  - JupyterHub: oc -n jupyterhub get route jupyterhub   (the notebook UI)
+Notes:
+  - OpenDataHub/RHOAI operator unavailable on Apple Silicon (x86_64-only) —
+    JupyterHub stands in for JupyterLab workbenches.
+  - GPU workbench profiles are not possible on this box (no NVIDIA GPU).
 EOF

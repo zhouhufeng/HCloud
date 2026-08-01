@@ -25,6 +25,10 @@ PROV=$(oc get sc "$DEFAULT_SC" -o jsonpath='{.provisioner}')
 echo "  default SC = ${DEFAULT_SC} (provisioner: ${PROV})"
 
 echo "==> Creating NERC-name alias StorageClass 'ocs-external-storagecluster-ceph-rbd'"
+# IMPORTANT: copy the default SC's parameters verbatim — CRC's kubevirt
+# hostpath CSI requires storagePool (else "unable to locate path for storage
+# pool legacy" and PVCs never provision).
+PARAMS=$(oc get sc "$DEFAULT_SC" -o json | jq '.parameters // {}')
 cat <<EOF | oc apply -f -
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -33,9 +37,9 @@ metadata:
   annotations:
     hcloud.local/notes: "NERC-name alias; PVCs referencing this class bind on CRC unchanged. Backed by ${PROV}."
 provisioner: ${PROV}
+parameters: ${PARAMS}
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: true
 EOF
 
 echo "==> Installing MinIO operator (object storage)"

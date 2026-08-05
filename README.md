@@ -78,6 +78,35 @@ Full runbook: **`docs/mac-studio-runbook.md`**. NERC-service parity mapping:
 
 **RAM is the binding constraint on `pc`.** 31 GiB cannot run the full NERC stack (ClickHouse 2.3 TiB + 2× Elasticsearch + MinIO + Postgres + services) simultaneously — the web/API and lighter services run fine; the heavy analytics stores run one-at-a-time or trimmed. The i7-12700 boards take **128 GB DDR4/5** — that upgrade removes the wall entirely.
 
+## Recommended production hardware (department server room)
+
+Sized to run the **entire** NERC-equivalent stack (ClickHouse, 2× Elasticsearch,
+MinIO, RocksDB, Postgres/pgvector, Kuzu, API + workers) concurrently, with headroom
+for growth and public serving. The two decisive factors are **RAM** (the constraint
+that blocks the full stack on the 31 GiB dev box) and **fast NVMe storage** (the
+databases do heavy random I/O — a spinning HDD is the bottleneck).
+
+**Ideal production box — Dell Precision 7960 Tower (or PowerEdge T560 for a true server):**
+
+| Component | Ideal production spec | Why |
+|---|---|---|
+| CPU | Xeon W9 / dual Xeon Scalable — **32–56 cores** | ClickHouse + concurrent search/API scale with cores |
+| RAM | **512 GB DDR5 ECC** (256 GB minimum) | Runs all DBs at once **plus** OS page-cache for ~7 TB hot data; ECC is mandatory for 24/7 |
+| Boot | 2 TB NVMe SSD | OS + RKE2 control plane |
+| Database storage | **32 TB NVMe SSD, RAID10 / ZFS mirror** (e.g. 4–8× 8 TB) | ClickHouse/ES/RocksDB/Postgres need NVMe IOPS, not HDD; mirrored to survive a drive failure |
+| Bulk / object + backup | 22 TB+ HDD or NAS | MinIO bulk objects + backup target for the NVMe tier |
+| GPU (optional) | NVIDIA RTX 6000 Ada (48 GB) | AlphaGenome / ML inference; skip if CPU-only |
+| Network | 10 GbE | Public serving + fast data movement |
+| Resilience | RAID10/ZFS, redundant PSU, UPS, iDRAC/remote mgmt | Production posture — no single point of failure |
+
+**Baseline (works, tighter):** 24-core Xeon W · 256 GB ECC · 1 TB boot NVMe · 16 TB NVMe
+(RAID10) · reuse a 22 TB HDD for MinIO/backups. This already runs the full stack
+comfortably; scale RAM/NVMe up for more concurrent users and dataset growth.
+
+**Deployment note:** put the database volumes (ClickHouse, Elasticsearch, RocksDB,
+Postgres, Kuzu) on the **NVMe tier**; MinIO's bulk objects can live on the HDD/NAS.
+Never run the platform off a single un-mirrored disk — keep a backup of the data tier.
+
 ## What HCloud is for
 
 1. **A landing zone for the NERC project `favor-4ee4be`** (the genohub.org research platform). NERC is shutting down; HCloud gives every workload, config, and data volume a place to keep running.

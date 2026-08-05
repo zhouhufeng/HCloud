@@ -99,7 +99,31 @@ databases do heavy random I/O — a spinning HDD is the bottleneck).
 | Network | 10 GbE | Public serving + fast data movement |
 | Resilience | RAID10/ZFS, redundant PSU, UPS, iDRAC/remote mgmt | Production posture — no single point of failure |
 
-**Baseline (works, tighter):** 24-core Xeon W · 256 GB ECC · 1 TB boot NVMe · 16 TB NVMe
+**Rack-mount option (for the department server room) — Dell PowerEdge R760, 2U:**
+
+The same capability in a rack chassis with server-room essentials (redundant power,
+hot-swap NVMe, remote management). Preferred over a tower when it lives in a rack.
+
+| Component | Rack production spec | Why |
+|---|---|---|
+| Chassis | **PowerEdge R760, 2U**, ReadyRails sliding rail kit | Standard 2U depth; fits a 19″ rack |
+| CPU | **2× Xeon Scalable (Gold), 32–64 cores total** | Dual-socket; ClickHouse/search/API scale with cores |
+| RAM | **512 GB DDR5 ECC RDIMM** (256 GB min; scales to multi-TB) | Full stack + page-cache for ~7 TB hot data |
+| Boot | **BOSS-N1: 2× 480 GB M.2 NVMe, RAID1** | Mirrored OS, separate from data |
+| Database storage | **8× 3.84 TB U.2/E3.S NVMe, hot-swap, RAID10** (PERC H965i or ZFS) → ~15 TB usable | NVMe IOPS for the DBs; survives a drive failure |
+| Bulk / object + backup | 4× 8 TB SAS/SATA (or external JBOD) for MinIO + backups | Cheap capacity tier |
+| GPU (optional) | **R760xa** variant → up to 4× NVIDIA GPUs (RTX/L40S) | Only if AlphaGenome/ML needs GPU |
+| Network | **dual 10/25 GbE** | Public serving + redundancy |
+| Management | **iDRAC9 Enterprise** | Remote KVM/power — essential for a lights-out server room |
+| Power | **redundant PSU (1+1), 1100–1400 W** | Dual PDU feeds; pair with rack UPS |
+
+Denser/cheaper 1U alternative: **PowerEdge R660** (fewer drive bays). Storage-heavy
+alternative: **R760xd2** (many bays) if MinIO/datasets grow large.
+
+**Server-room checklist:** 2U rack space · dual power feeds + PDU + UPS · adequate
+cooling/airflow · 10/25 GbE uplink · iDRAC on the management VLAN for remote ops.
+
+**Baseline (works, tighter):** 24-core Xeon · 256 GB ECC · mirrored boot · 16 TB NVMe
 (RAID10) · reuse a 22 TB HDD for MinIO/backups. This already runs the full stack
 comfortably; scale RAM/NVMe up for more concurrent users and dataset growth.
 

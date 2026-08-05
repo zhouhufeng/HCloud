@@ -86,23 +86,10 @@ for growth and public serving. The two decisive factors are **RAM** (the constra
 that blocks the full stack on the 31 GiB dev box) and **fast NVMe storage** (the
 databases do heavy random I/O — a spinning HDD is the bottleneck).
 
-**Ideal production box — Dell Precision 7960 Tower (or PowerEdge T560 for a true server):**
+**Ideal production box — Dell PowerEdge R760 rack server (2U):**
 
-| Component | Ideal production spec | Why |
-|---|---|---|
-| CPU | Xeon W9 / dual Xeon Scalable — **32–56 cores** | ClickHouse + concurrent search/API scale with cores |
-| RAM | **512 GB DDR5 ECC** (256 GB minimum) | Runs all DBs at once **plus** OS page-cache for ~7 TB hot data; ECC is mandatory for 24/7 |
-| Boot | 2 TB NVMe SSD | OS + RKE2 control plane |
-| Database storage | **32 TB NVMe SSD, RAID10 / ZFS mirror** (e.g. 4–8× 8 TB) | ClickHouse/ES/RocksDB/Postgres need NVMe IOPS, not HDD; mirrored to survive a drive failure |
-| Bulk / object + backup | 22 TB+ HDD or NAS | MinIO bulk objects + backup target for the NVMe tier |
-| GPU (optional) | NVIDIA RTX 6000 Ada (48 GB) | AlphaGenome / ML inference; skip if CPU-only |
-| Network | 10 GbE | Public serving + fast data movement |
-| Resilience | RAID10/ZFS, redundant PSU, UPS, iDRAC/remote mgmt | Production posture — no single point of failure |
-
-**Rack-mount option (for the department server room) — Dell PowerEdge R760, 2U:**
-
-The same capability in a rack chassis with server-room essentials (redundant power,
-hot-swap NVMe, remote management). Preferred over a tower when it lives in a rack.
+The department-server-room target: a 2U rack chassis with redundant power, hot-swap
+NVMe, and remote management. Full purchasing summary in [`docs/HARDWARE.md`](docs/HARDWARE.md).
 
 | Component | Rack production spec | Why |
 |---|---|---|
@@ -118,7 +105,8 @@ hot-swap NVMe, remote management). Preferred over a tower when it lives in a rac
 | Power | **redundant PSU (1+1), 1100–1400 W** | Dual PDU feeds; pair with rack UPS |
 
 Denser/cheaper 1U alternative: **PowerEdge R660** (fewer drive bays). Storage-heavy
-alternative: **R760xd2** (many bays) if MinIO/datasets grow large.
+alternative: **R760xd2** (many bays) if MinIO/datasets grow large. Non-rack
+alternative: **Dell Precision 7960 Tower** (Xeon W, same RAM/NVMe) for a deskside box.
 
 **Server-room checklist:** 2U rack space · dual power feeds + PDU + UPS · adequate
 cooling/airflow · 10/25 GbE uplink · iDRAC on the management VLAN for remote ops.

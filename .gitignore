@@ -6,3 +6,6 @@ pull-secret.txt
 *pull-secret*
 *.pem
 *.key
+
+# migrated PVC data (never commit)
+cluster-data/

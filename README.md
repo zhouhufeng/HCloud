@@ -2,14 +2,26 @@
 
 HCloud is a self-hosted replacement for the terminating [NERC (New England Research Cloud)](https://nerc-project.github.io/nerc-docs/) platform. The group's NERC OpenShift project — pods, services, databases, object storage, and ~7–8 TiB of data — is migrated, kept running, and **served publicly** on hardware we own.
 
-HCloud now has **two deployment platforms** in this one repo:
+**The Linux `pc` and Mac Studio deployments are proof-of-concept tests on personal
+hardware** — they prove that HCloud can replace NERC's OpenShift on infrastructure we
+own. The **formal, full-service production deployment will run on a purchased rack
+server** with the [recommended configuration](#recommended-production-hardware-department-server-room)
+(Dell PowerEdge R760).
 
-| Platform | Machine | Stack | Status |
-|---|---|---|---|
-| **Linux path** | `pc` — i7-12700, 31 GiB RAM, 22 TB HSA disk | **RKE2** bare-metal Kubernetes, ingress-nginx, Routes→Ingress | migration in progress (`docs/Secretes/migration/STATUS.md` on that box) |
-| **Mac path (primary production)** | **Mac Studio** — Apple Silicon Ultra, **128 GiB RAM**, 20 TiB `/Volumes/HSZ` | **OpenShift Local (CRC)** — real OpenShift 4.22, native Routes/BuildConfigs, RHOAI-equivalent services | cluster up 2026-07-28; see `docs/mac-studio-runbook.md` |
+| Deployment | Role | Machine | Stack | Status |
+|---|---|---|---|---|
+| **Linux path** | proof-of-concept | `pc` — i7-12700, 31 GiB RAM, 22 TB disk | RKE2 bare-metal Kubernetes, Routes→Ingress | ✅ tested; full NERC→local data migration validated |
+| **Mac path** | proof-of-concept | Mac Studio — Apple Silicon, 128 GiB RAM, 20 TiB `/Volumes/HSZ` | OpenShift Local (CRC) 4.22, native Routes/BuildConfigs | ✅ tested; cluster up 2026-07-28 (`docs/mac-studio-runbook.md`) |
+| **Production** | **formal deployment (target)** | **Dell PowerEdge R760 rack server** (recommended config) | full stack + public serving, 24/7 | ⬜ on hardware purchase |
 
-> **Why two platforms?** The Linux box (31 GiB RAM) can't run the full NERC stack at once, so it pivoted to lean bare-metal RKE2 (no VM overhead) — see the platform note below. The Mac Studio has 128 GiB and can afford a **real OpenShift** cluster (96 GiB VM), which keeps everything NERC-native: `oc`, Routes, ImageStreams, BuildConfigs, the web console, and the RHOAI-style data-science stack. Both paths serve the public site via Cloudflare Tunnel + cert-manager.
+> **Why two proof-of-concept tests?** They de-risk the approach on hardware we already
+> had. The Linux box proved a lean bare-metal **RKE2** path and the complete NERC→local
+> **data migration** (~7–8 TiB). The Mac Studio (128 GiB) proved a **real OpenShift**
+> (CRC) path with full NERC API parity (`oc`, Routes, BuildConfigs, RHOAI-style stack).
+> Both confirm HCloud is viable — but neither test box is production-grade (the 31 GiB
+> Linux box is RAM-bound; Apple Silicon lacks GPU/Linux-container parity). The **real
+> deployment happens on the rack server**, which has the RAM, NVMe, and redundancy to
+> run the entire stack for the department 24/7.
 
 > **Platform note for the Linux `pc` box (2026-07):** CRC there was retired for **RKE2** — CRC is a development-scale tool and the 31 GiB host needed the ~8–10 GB the VM cost. OpenShift `Route` objects are converted to `Ingress` (`scripts/50-convert-manifests.py`); everything else applies unchanged. On the Mac Studio, RAM is abundant, so CRC's convenience (true OpenShift API parity with NERC) wins — no manifest conversion beyond host names.
 
@@ -44,7 +56,12 @@ HCloud now has **two deployment platforms** in this one repo:
 - **Linux `pc` is RAM-bound (31 GiB)** — heavy analytics stores run one-at-a-time there until a 128 GB upgrade. The **Mac Studio does not have this wall** (96 GiB cluster).
 - **No GPU on the Mac** — Apple Metal isn't exposed to Linux containers; GPU workloads stay a gap on both machines for now.
 
-## Mac Studio — primary production target
+## Mac Studio — proof-of-concept (real-OpenShift path)
+
+_A concept test on personal hardware, not the production target — the formal
+deployment is the rack server. This validated a full OpenShift (CRC) path with
+NERC API parity._
+
 
 Full runbook: **`docs/mac-studio-runbook.md`**. NERC-service parity mapping:
 

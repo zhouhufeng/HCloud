@@ -1,0 +1,16 @@
+#cloud-config
+# HCloud node on an OpenStack (or any cloud-init) VM. Deliberately minimal: the host is
+# finished by platform/linux/10-host-prep.sh and the cluster by hcloud/. The attached data
+# volume is mounted at the middleware's default HCLOUD_STORAGE_DIR.
+hostname: ${hostname}
+package_update: true
+packages: [curl, jq, python3, python3-yaml, open-iscsi, nfs-common, chrony]
+disk_setup:
+  /dev/vdb: {table_type: gpt, layout: true, overwrite: false}
+fs_setup:
+  - {label: hcloud-data, filesystem: ext4, device: /dev/vdb1}
+mounts:
+  - [LABEL=hcloud-data, /var/lib/hcloud/storage, ext4, "defaults,nofail", "0", "2"]
+runcmd:
+  - mkdir -p /var/lib/hcloud/storage
+  - mount -a

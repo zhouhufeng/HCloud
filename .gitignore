@@ -9,3 +9,9 @@ pull-secret.txt
 
 # migrated PVC data (never commit)
 cluster-data/
+
+# HCloud platform contract + platform state (per-node / per-deployment, never shared)
+hcloud/hcloud.env
+platform/**/.terraform/
+platform/**/*.tfstate*
+platform/**/*.tfvars

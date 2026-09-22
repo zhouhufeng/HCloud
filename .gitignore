@@ -15,3 +15,6 @@ hcloud/hcloud.env
 platform/**/.terraform/
 platform/**/*.tfstate*
 platform/**/*.tfvars
+
+# Jetstream2 backup target (multi-TB; never commit)
+JetstreamData/

@@ -15,3 +15,6 @@ hcloud/hcloud.env
 platform/**/.terraform/
 platform/**/*.tfstate*
 platform/**/*.tfvars
+
+# the cloud backup target (multi-TB; never commit)
+BackupData/

@@ -16,5 +16,5 @@ platform/**/.terraform/
 platform/**/*.tfstate*
 platform/**/*.tfvars
 
-# the cloud backup target (multi-TB; never commit)
-BackupData/
+# Local multi-TB backup target (never commit)
+/*Data/

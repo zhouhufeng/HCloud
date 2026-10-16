@@ -18,8 +18,8 @@ tenants, monitoring — so the applications never learn where they are running.
 │  → tenants/quotas → monitoring.  Reads only hcloud.env. Uses only kubectl.   │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │  HOSTING PLATFORM        platform/                                           │
-│  own hardware: Linux pc · Mac Studio (Lima VM / CRC) · Dell MX7000 blades    │
-│  clouds:       OpenStack VMs (ours, on the MX7000) · AWS EC2                 │
+│  own hardware: Linux pc · Mac Studio (Lima VM / CRC) · Lin Lab 4-node cluster    │
+│  clouds:       OpenStack VMs (ours, on the Lin Lab 4 nodes) · AWS EC2          │
 │  delivers: a Linux host, a mounted data directory, outbound internet         │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -53,7 +53,7 @@ platform/        Layer 1 — hosting platforms (get to a Linux host that meets t
   linux/           any Linux host: bare metal (pc, Dell sled) or VM        ✅ validated
   mac/             Mac Studio: Lima Linux VM for K3s                       ⬜ reference
   mac/crc/         Mac Studio: OpenShift Local (CRC) proof-of-concept      ✅ validated 2026-07
-  openstack/       OpenStack VMs (Terraform + Cinder CSI add-on)           ⬜ designed
+  openstack/       OpenStack VMs on the Lin Lab 4-node cluster (Terraform: 3 servers + agent; Cinder CSI) ⬜ bring-up next
   aws/             AWS EC2                                                 ⬜ reference
   legacy/          CRC on a Linux desktop (2026-07 experiments)            archived
 hcloud/          Layer 2 — THE MIDDLEWARE: 10-install-k8s → 11-storage → 12-ingress-tls
@@ -63,7 +63,7 @@ docs/
   ARCHITECTURE.md      the layered model, contract, and decisions
   MIGRATION.md         NERC → HCloud runbook, migration status, resume/port
   DEPLOYMENT-STATUS.md what is up where, dated
-  platforms/           one page per hosting platform (linux-baremetal, mac-studio, dell-mx7000, openstack, aws)
+  platforms/           one page per hosting platform (lin-lab, linux-baremetal, mac-studio, dell-mx7000 (superseded), openstack, aws)
 docs/Secretes/   git-ignored: credentials, pull secret, NERC exports, converted manifests, kubeconfigs
 cluster-data/    git-ignored: the migrated PVC data (~7 TiB), one directory per volume
 ```
@@ -95,7 +95,7 @@ AWS → `platform/aws/10-ec2.sh`. Each ends at the same "any Linux host" quick s
 |---|---|---|---|
 | Linux `pc` (i7-12700, 31 GiB, 22 TB HDD) | RKE2 + local-path | the full pipeline and ~7 TiB of NERC data migrated | ✅ running |
 | Mac Studio (M-Ultra, 128 GiB, 20 TiB) | OpenShift Local (CRC) | an OpenShift-API-parity path; RAM headroom | ✅ cluster up 2026-07-28; superseded by K3s |
-| **Dell MX7000 blades + storage rack** ($150k, racked at HSPH IT) | **K3s**, bare metal or on OpenStack VMs | the production platform: full stack concurrently, NVMe, GPU sled, 24/7 public serving | ⬜ bring-up next — `docs/platforms/dell-mx7000.md`, `docs/platforms/openstack.md` |
+| **Lin Lab 4-node cluster** (4× 4U, 512 cores, 2 TB RAM, $148.6k) | **K3s on OpenStack VMs**: 3 server VMs (embedded etcd, one per node) + 1 agent VM | the production platform: full stack, 24/7 public serving | ⬜ bring-up next — `docs/platforms/lin-lab.md`, `platform/openstack/` |
 | AWS / other clouds | K3s on VMs | burst, staging, portability proof | ⬜ reference |
 
 The $200k purchase ($150k hardware + $50k AI tooling) and its rationale are in

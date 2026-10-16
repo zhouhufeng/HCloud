@@ -1,13 +1,13 @@
 # Platform: OpenStack VMs
 
-HCloud on VMs provided by an OpenStack cloud — our own (Kolla-Ansible on the Dell
-MX7000, designed in [`docs/platforms/openstack.md`](../../docs/platforms/openstack.md))
+HCloud on VMs provided by an OpenStack cloud — our own (OpenStack installed on the
+Lin Lab 4-node cluster; design notes in [`docs/platforms/openstack.md`](../../docs/platforms/openstack.md))
 or any other. The middleware is unchanged; this directory only creates the VMs and,
 afterwards, teaches the cluster to use Cinder volumes.
 
 | File | Purpose |
 |---|---|
-| `main.tf` | OpenTofu/Terraform: network, anti-affinity server group, 3 K3s server VMs (extend with agent/db/gpu VMs per the design doc §13.1) |
+| `main.tf` | OpenTofu/Terraform: network, anti-affinity server group, 3 K3s server VMs (one per node) and 1 K3s agent VM on the 4th node |
 | `cloud-init/node.yaml` | Minimal cloud-init for every node: packages, data disk mount at `HCLOUD_STORAGE_DIR` |
 | `20-cloud-integration.sh` | **After** the middleware: OpenStack cloud-controller-manager + Cinder CSI, StorageClass `cinder-ceph`, re-points the NERC alias class at Cinder |
 
@@ -22,6 +22,6 @@ bash platform/openstack/20-cloud-integration.sh
 ```
 
 Platform-specific rules that the design doc explains and this layer enforces: the three
-servers on three different hypervisors (server group), etcd and database PVs on
+servers on three different hypervisors / nodes (server group), etcd and database PVs on
 host-local NVMe rather than Ceph, `cloud-provider=external` before the CCM runs, MTU set
 on the Neutron network and never in the guest, MetalLB VIPs in `allowed_address_pairs`.

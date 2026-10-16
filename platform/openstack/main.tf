@@ -12,15 +12,17 @@ provider "openstack" { cloud = var.cloud }   # entry in /etc/openstack/clouds.ya
 variable "cloud"        { default = "hcloud" }
 variable "image_name"   { default = "ubuntu-24.04" }
 variable "key_pair"     { default = "hcloud-admin" }
-variable "server_count" { default = 3 }
+variable "server_count" { default = 3 }              # K3s servers (embedded etcd quorum), one per hypervisor
 variable "server_flavor" { default = "k3s.server" }
+variable "agent_count"  { default = 1 }              # K3s agent VMs: the 4th Lin Lab node takes the spare capacity
+variable "agent_flavor" { default = "k3s.agent" }
 variable "data_disk_gb" { default = 200 }            # etcd + local-path on a host-local NVMe volume type
 variable "data_volume_type" { default = "local-nvme" }
 variable "k3s_token"    { sensitive = true }        # TF_VAR_k3s_token, never in git
 
 resource "openstack_compute_servergroup_v2" "servers" {
   name     = "k3s-servers"
-  policies = ["anti-affinity"]                       # three servers on three sleds, or etcd dies with one sled
+  policies = ["anti-affinity"]                       # three servers on three hypervisors, or etcd dies with one node
 }
 
 resource "openstack_networking_network_v2" "k3s" { name = "k3s-net" }
@@ -72,4 +74,16 @@ resource "openstack_compute_volume_attach_v2" "server_data" {
   volume_id   = openstack_blockstorage_volume_v3.server_data[count.index].id
 }
 
+resource "openstack_compute_instance_v2" "agent" {
+  count           = var.agent_count
+  name            = "k3s-agent-${count.index + 1}"
+  image_name      = var.image_name
+  flavor_name     = var.agent_flavor
+  key_pair        = var.key_pair
+  security_groups = [openstack_networking_secgroup_v2.nodes.name]
+  user_data       = templatefile("${path.module}/cloud-init/node.yaml", { hostname = "k3s-agent-${count.index + 1}" })
+  network { uuid = openstack_networking_network_v2.k3s.id }
+}
+
 output "server_ips" { value = openstack_compute_instance_v2.server[*].access_ip_v4 }
+output "agent_ips"  { value = openstack_compute_instance_v2.agent[*].access_ip_v4 }

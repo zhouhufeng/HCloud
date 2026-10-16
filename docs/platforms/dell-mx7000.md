@@ -1,3 +1,6 @@
+> **Superseded (2026-10-16):** the hardware this page describes was replaced by the Lin Lab 4-node
+> cluster, see [`lin-lab.md`](lin-lab.md). Kept for the purchase record.
+
 # Platform: Dell MX7000 blades + storage rack — the production hardware ($150,000 + $50,000)
 
 *Hosting-platform page.* Two ways to run HCloud on this hardware, both using the same

@@ -1,3 +1,7 @@
+> **Status note (2026-10-16):** the four nodes are the Lin Lab cluster described in
+> [`lin-lab.md`](lin-lab.md). The MX7000 sled sizing below is the earlier design; the Lin Lab
+> spec and the gaps to resolve are in `lin-lab.md` §4.
+
 # HCloud — OpenStack IaaS on the Dell MX7000, with K3s on top
 
 **Status:** design + implementation runbook. **Target:** the purchased $150,000 platform

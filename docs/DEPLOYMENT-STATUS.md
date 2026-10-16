@@ -2,6 +2,13 @@
 
 Dated record of what is up where. Newest first. Platform pages: `docs/platforms/`.
 
+## 2026-10-16 — Lin Lab 4-node cluster
+
+Hardware per the genohub.org post (`docs/platforms/lin-lab.md`): 4 × 4U nodes, 512 cores, 2 TB RAM,
+12 × 14 TB HDD + 2 × 2 TB NVMe boot per node. OpenStack installed on the nodes; HCloud K3s runs in
+OpenStack VMs (3 servers + 1 agent). Not yet brought up. Open: HDD total (150 vs 168 TB per node),
+database storage without bulk NVMe, Ceph OSD layout.
+
 ## 2026-09-10 — repository reorganised around the middleware model
 
 HCloud is now explicitly three layers — `platform/` (hosting), `hcloud/` (K3s

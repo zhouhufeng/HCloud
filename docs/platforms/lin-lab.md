@@ -14,21 +14,21 @@ VMs unchanged. Nothing in `hcloud/` or `apps/` is specific to these nodes.
 |---|---|---|
 | CPU | 2× 64-core Intel Xeon (696X-class) — 128 cores / 256 threads | 512 cores / 1,024 threads |
 | RAM | 512 GB DDR5 ECC RDIMM (16× 32 GB) | 2 TB |
-| Boot | 2× 2 TB PCIe Gen4 NVMe | 16 TB NVMe (boot) |
-| Bulk | 12× 14 TB SAS enterprise HDD | 672 TB raw (see §1.1) |
+| Boot | 2× 2 TB PCIe Gen4 NVMe — boot only | 16 TB NVMe (boot only) |
+| Bulk | 12× 14 TB SAS enterprise HDD — all data storage | 168 TB per node, **672 TB raw** |
 | Network | Dual 10 GbE onboard | — |
 | Chassis | 4U rackmount, 12–24 bays, dual-socket board, redundant 1600 W PSUs, rack fans, rails | — |
 
 **Cost (post):** hardware ≈ $30,650 per node, $122,600 total; integration, burn-in, and a 3–5 year
 warranty add $26,000; estimated total **$148,600**.
 
-### 1.1 Figures to reconcile before purchase or sizing
+### 1.1 Storage layout (confirmed)
 
-- **HDD total.** The post states 150 TB HDD per node and 600 TB raw across the cluster. Twelve 14 TB
-  drives per node is **168 TB per node, 672 TB total**. This page uses the drive count. Usable capacity
-  after RAID-6 or erasure coding is about 400–450 TB, per the post.
-- **NVMe.** The post lists the NVMe drives as boot storage only. Nothing in the spec gives the
-  databases local NVMe, which the OpenStack runbook assumes (see §4).
+- **Capacity:** 12 × 14 TB = **168 TB per node, 672 TB raw** across four nodes. The post's "150 TB" and
+  "600 TB" figures are superseded.
+- **Usable capacity** after RAID-6 or erasure coding is about 400–450 TB, per the post.
+- **NVMe is boot only** (2 × 2 TB per node, mirrored). **All data storage is on HDD.** No NVMe is
+  available for databases, etcd, or Ceph journals.
 
 ## 2. Topology
 
@@ -70,12 +70,12 @@ Checks: `kubectl get nodes` shows 3 servers and 1 agent Ready; `kubectl get sc` 
 `docs/platforms/openstack.md` was written for the MX7000 design and needs these changes for the Lin Lab
 hardware:
 
-- **Database storage.** The runbook keeps etcd and database PVs on host-local NVMe (RAID10). The Lin Lab
-  nodes have only 2× 2 TB NVMe, used for boot. Options: (a) a small NVMe partition or volume for etcd and
-  databases, (b) databases on the HDD pool with a RAID-6 virtual disk, slower, (c) a separate NVMe
-  add-on. This is undecided.
-- **Ceph.** The runbook places Ceph MON/MGR/OSD on the sleds. On 12 HDD per node, Ceph OSDs fit the HDD
-  pool, and the 2 TB NVMe are then not Ceph media. Confirm the OSD layout before running §8 of the runbook.
+- **Database and etcd storage.** The runbook keeps etcd and database PVs on host-local NVMe (RAID10). The
+  Lin Lab nodes have no such NVMe, so etcd and every database (ClickHouse, Postgres, Elasticsearch, RocksDB,
+  Kuzu) run on the HDD pool. HDD fsync latency is a risk for etcd and for random-I/O databases. Test it
+  before the production cutover.
+- **Ceph.** The runbook places Ceph MON/MGR/OSD on the sleds. Here the OSDs sit on the 12 HDD per node, and
+  the NVMe boot drives are not Ceph media. Confirm the OSD layout before running §8 of the runbook.
 - **Memory budget.** At 512 GB per node, the runbook's 768 GB sleds have 50% less. The capacity budget in
   the runbook (§2) must be recomputed. The post says 512 GB may be low for large in-memory analytics.
 - **Cooling and power.** The post flags 128 cores per node and redundant power as needing checks at install.

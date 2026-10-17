@@ -964,7 +964,7 @@ The migration path does not change. The repo's scripts still apply:
 
 ### One sequencing rule
 
-**Do not copy 7 TB twice.** The ~7.1 TiB already sitting on `/media/hzhou/HSA/Sync/HCloud/cluster-data`
+**Do not copy 7 TB twice.** The ~7.1 TiB already sitting in `cluster-data/` on the local drive
 (MinIO, RocksDB, Kuzu, Postgres, higlass, api-cache complete; ClickHouse ~87%) is the
 staging copy. Bring OpenStack + K3s up **empty**, validate it end to end, and only then
 rsync from HSA into the new PVCs and perform the ClickHouse cutover quiesce. If you push

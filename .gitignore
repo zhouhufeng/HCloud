@@ -8,7 +8,7 @@ pull-secret.txt
 *.key
 
 # migrated PVC data (never commit)
-cluster-data/
+/cluster-data
 
 # HCloud platform contract + platform state (per-node / per-deployment, never shared)
 hcloud/hcloud.env
@@ -17,4 +17,4 @@ platform/**/*.tfstate*
 platform/**/*.tfvars
 
 # Local multi-TB backup target (never commit)
-/*Data/
+/*Data
